@@ -13,4 +13,9 @@ if __name__ == '__main__':
     sl = SimLoot.SimLoot(rosterSize, minNumberOfPlayers, maxNumberOfPlayers, itemLevelAverage, itemLevelVariance, perCharacterItemLevelVariance)
     sl.runRaids(numberOfRaids)
 
+    for i, char in enumerate(sl.roster):
+        print i, char.armorClass, char.items
+
+    print sl._averageItemLevel(sl.roster)
+
     print "WoWLootSimulator::End"
