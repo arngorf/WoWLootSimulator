@@ -6,39 +6,142 @@ from copy import deepcopy
 class SimLoot:
     def __init__(self, rosterSize, minNumberOfPlayers, maxNumberOfPlayers, itemLevelAverage, itemLevelVariance, perCharacterItemLevelVariance):
 
+        # Init constants
         self.minNumberOfPlayers = minNumberOfPlayers
         self.maxNumberOfPlayers = maxNumberOfPlayers
         self.dropChance_ML = 0.20
         self.dropChance_PL = 0.27
 
+        # Generate a constant base roster
         self.baseRoster = self._generateRoster(rosterSize, itemLevelAverage, itemLevelVariance, perCharacterItemLevelVariance)
 
-    def runRaids(self, numberOfRaids):
+    def runRaids(self, numberOfRaidWeeks, raidSchedule):
 
-        roster_PL = deepcopy(self.roster)
-        roster_ML = deepcopy(self.roster)
+        # Copy the constant base roster every time a new group of raids is run
+        roster_ML = deepcopy(self.baseRoster)
+        roster_PL = deepcopy(self.baseRoster)
 
-        for i in range(numberOfRaids):
-            raidGroup_PL = self._pickRaidGroup(roster_PL)
-            raidGroup_PL = self._pickRaidGroup(roster_PL)
-            self._runRaid(raidGroup_PL)
+        rosterItemLevelAverages_ML = [self._averageItemLevel(roster_ML)]
+        rosterItemLevelAverages_PL = [self._averageItemLevel(roster_PL)]
 
-        rosterItemLevelAverages = []
+        nightholdNormalRaid = Objects.Raid([870, 870, 870, 875, 875, 875, 875, 875, 875, 880])
+        nightholdHeroicRaid = Objects.Raid([885, 885, 885, 890, 890, 890, 890, 890, 890, 895])
 
-        return rosterItemLevelAverages
+        nightholdNormalLootTables = nightholdNormalRaid.getLootTables()
+        nightholdHeroicLootTables = nightholdHeroicRaid.getLootTables()
 
-    def _runRaid(self, raidGroup, lootSystem):
-        raid = Objects.Raid(10, [870, 870, 870, 875, 875, 875, 875, 875, 875, 880], len(raidGroup))
+        raidSchedule = map(lambda x: x.lower(), raidSchedule)
 
-    def _pickRaidGroup(self, roster):
-        raidSize = random.randint(self.minNumberOfPlayers, maxNumberOfPlayers)
-        return np.random.permutation(roster)[:raidSize]
+        # Run the raids
+        for i in range(numberOfRaidWeeks):
+            raidGroup_ML, raidGroup_PL = self._pickRaidGroup(roster_ML, roster_PL)
 
-    def distributeMasterLoot(self):
-        pass
+            if 'nighthold normal' in raidSchedule:
+                self._distributeMasterLoot(raidGroup_ML, nightholdNormalLootTables)
+                self._distributePersonalLoot(raidGroup_PL, nightholdNormalLootTables)
 
-    def distributePersonalLoot(self):
-        pass
+            if 'nighthold heroic' in raidSchedule:
+                self._distributeMasterLoot(raidGroup_ML, nightholdHeroicLootTables)
+                self._distributePersonalLoot(raidGroup_PL, nightholdHeroicLootTables)
+
+            rosterItemLevelAverages_PL.append(self._averageItemLevel(roster_PL))
+            rosterItemLevelAverages_ML.append(self._averageItemLevel(roster_ML))
+
+        return rosterItemLevelAverages_ML, rosterItemLevelAverages_PL
+
+    def _pickRaidGroup(self, roster_PL, roster_ML):
+
+        raidSize = random.randint(self.minNumberOfPlayers, self.maxNumberOfPlayers)
+        indices = range(raidSize)
+        indices = np.random.permutation(indices)[:raidSize]
+
+        raidGroup_ML = []
+        raidGroup_PL = []
+
+        for i in indices:
+            raidGroup_ML.append(roster_ML[i])
+            raidGroup_PL.append(roster_PL[i])
+
+        return raidGroup_PL, raidGroup_ML
+
+    def _distributeMasterLoot(self, raidGroup, lootTables):
+
+        raidSize = len(raidGroup)
+        for lootTable in lootTables:
+
+            totalDropChance = raidSize * self.dropChance_ML
+
+            numberOfDroppedItems = int(totalDropChance)
+
+            extraItemRoll = random.uniform(0,1)
+            extraItemRollDropChance = totalDropChance % 1
+
+            if extraItemRoll < extraItemRollDropChance:
+                numberOfDroppedItems += 1
+
+            # Pick dropped items randomly from the loot table
+            droppedItems = np.random.permutation(lootTable)[:numberOfDroppedItems]
+
+            for item in droppedItems:
+                itemLevelUpgradeSizes = map(lambda x: x.upgradeSize(item), raidGroup)
+
+                # Sort raiders from most to least needing
+                needingRaiders = [x for (y,x) in sorted(zip(itemLevelUpgradeSizes, raidGroup), key=lambda pair: pair[0])][::-1]
+
+                # Find the 5 most needed raiders
+                needingRaiders = needingRaiders[:5]
+
+                # Filter any raiders that don't need the item
+                needingRaiders = filter(lambda x: x.needsItem(item), raidGroup)
+
+                if len(needingRaiders) > 0:
+                    luckyRaiderIndex = random.randint(0,len(needingRaiders) - 1)
+                    needingRaiders[luckyRaiderIndex].equipItem(item)
+                else:
+                    # Wasted item
+                    pass
+
+    def _distributePersonalLoot(self, raidGroup, lootTables):
+        raidSize = len(raidGroup)
+        for lootTable in lootTables:
+
+            totalDropChance = raidSize * self.dropChance_PL
+
+            numberOfDroppedItems = int(totalDropChance)
+
+            extraItemRoll = random.uniform(0,1)
+            extraItemRollDropChance = totalDropChance % 1
+
+            if extraItemRoll < extraItemRollDropChance:
+                numberOfDroppedItems += 1
+
+            # Pick lucky raiders to get item
+            luckyRaiders = np.random.permutation(raidGroup)[:numberOfDroppedItems]
+
+            for raider in luckyRaiders:
+
+                elligibleLoot = filter(lambda x: raider.elligibleItem(x), lootTable)
+                item = elligibleLoot[random.randint(0,len(elligibleLoot) - 1)]
+
+                if raider.needsItem(item):
+                    # Raider needs item
+                    raider.equipItem(item)
+                elif item.itemLevel <= raider.getItemLevelAtSlot(item.itemSlot):
+                    # The item is tradable
+
+                    # Filter any raiders that don't need the item
+                    needingRaiders = filter(lambda x: x.needsItem(item), raidGroup)
+
+                    if len(needingRaiders) > 0:
+                        luckyRaiderIndex = random.randint(0,len(needingRaiders) - 1)
+                        needingRaiders[luckyRaiderIndex].equipItem(item)
+                    else:
+                        # Wasted item - no one needs it
+                        pass
+                else:
+                    # Wasted item - not tradeable
+                    pass
+
 
     def _generateRoster(self, rosterSize, itemLevelAverage, itemLevelVariance, perCharacterItemLevelVariance):
 
@@ -57,9 +160,7 @@ class SimLoot:
 
     def _averageItemLevel(self, roster):
         n = len(roster)
-        rosterItems = map(lambda x: x.items, roster)
-        rosterPerCharacterItemLevelSum = map(sum, rosterItems)
-        rosterPerCharacterItemLevelAverage = map(lambda x: x/14., rosterPerCharacterItemLevelSum)
-        return sum(rosterPerCharacterItemLevelAverage)/n
+        perCharacterItemLevelAverages = map(lambda x: x.getAverageItemLevel(), roster)
+        return sum(perCharacterItemLevelAverages) / float(n)
 
 

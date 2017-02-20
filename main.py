@@ -1,21 +1,27 @@
 import SimLoot
+import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
     print "WoWLootSimulator::Begin"
 
     rosterSize = [9,9,9,9]
+    #rosterSize = [6,7,8,15]
     minNumberOfPlayers = 20
     maxNumberOfPlayers = 30
-    numberOfRaids = 1
+    numberOfRaidWeeks = 40
     itemLevelAverage = 870
     itemLevelVariance = 10
     perCharacterItemLevelVariance = 10
+
     sl = SimLoot.SimLoot(rosterSize, minNumberOfPlayers, maxNumberOfPlayers, itemLevelAverage, itemLevelVariance, perCharacterItemLevelVariance)
-    sl.runRaids(numberOfRaids)
 
-    for i, char in enumerate(sl.roster):
-        print i, char.armorClass, char.items
+    raidSchedule = ['Nighthold Normal', 'Nighthold Heroic']
 
-    print sl._averageItemLevel(sl.roster)
+    ML, PL = sl.runRaids(numberOfRaidWeeks, raidSchedule)
+
+    plt.plot(range(0, numberOfRaidWeeks+1), ML, label = 'Master loot')
+    plt.plot(range(0, numberOfRaidWeeks+1), PL, label = 'Personal loot')
+    plt.legend()
+    plt.show()
 
     print "WoWLootSimulator::End"
