@@ -3,6 +3,20 @@ import random
 import numpy as np
 from copy import deepcopy
 
+class SimLootResult:
+    def __init__(self, N):
+        self.N = N
+        self.itemLevelAverages = [0 for i in range(N)]
+        self.looted = [0 for i in range(N)]
+        self.wastedNoNeed = [0 for i in range(N)]
+        self.wastedNotTradeable = [0 for i in range(N)]
+
+    def normalize(self):
+        self.itemLevelAverages = map(lambda x: x/float(N), self.itemLevelAverages)
+        self.looted = map(lambda x: x/float(N), self.looted)
+        self.wastedNoNeed = map(lambda x: x/float(N), self.wastedNoNeed)
+        self.wastedNotTradeable = map(lambda x: x/float(N), self.wastedNotTradeable)
+
 class SimLoot:
     def __init__(self, rosterSize, minNumberOfPlayers, maxNumberOfPlayers, itemLevelAverage, itemLevelVariance, perCharacterItemLevelVariance):
 
@@ -15,39 +29,56 @@ class SimLoot:
         # Generate a constant base roster
         self.baseRoster = self._generateRoster(rosterSize, itemLevelAverage, itemLevelVariance, perCharacterItemLevelVariance)
 
-    def runRaids(self, numberOfRaidWeeks, raidSchedule):
+    def runRaids(self, numberOfRaidWeeks, raidSchedule, numberOfSimulationRuns=1):
 
-        # Copy the constant base roster every time a new group of raids is run
-        roster_ML = deepcopy(self.baseRoster)
-        roster_PL = deepcopy(self.baseRoster)
+        results_ML = SimLootResult(numberOfRaidWeeks + 1)
+        results_PL = SimLootResult(numberOfRaidWeeks + 1)
 
-        rosterItemLevelAverages_ML = [self._averageItemLevel(roster_ML)]
-        rosterItemLevelAverages_PL = [self._averageItemLevel(roster_PL)]
+        for i in range(numberOfSimulationRuns):
+            # Copy the constant base roster every time a new group of raids is run
+            roster_ML = deepcopy(self.baseRoster)
+            roster_PL = deepcopy(self.baseRoster)
 
-        nightholdNormalRaid = Objects.Raid([870, 870, 870, 875, 875, 875, 875, 875, 875, 880])
-        nightholdHeroicRaid = Objects.Raid([885, 885, 885, 890, 890, 890, 890, 890, 890, 895])
+            results_ML.itemLevelAverages[0] += self._averageItemLevel(self.baseRoster)
+            results_PL.itemLevelAverages[0] += self._averageItemLevel(self.baseRoster)
 
-        nightholdNormalLootTables = nightholdNormalRaid.getLootTables()
-        nightholdHeroicLootTables = nightholdHeroicRaid.getLootTables()
+            nightholdNormalRaid = Objects.Raid([870, 870, 870, 875, 875, 875, 875, 875, 875, 880])
+            nightholdHeroicRaid = Objects.Raid([885, 885, 885, 890, 890, 890, 890, 890, 890, 895])
 
-        raidSchedule = map(lambda x: x.lower(), raidSchedule)
+            nightholdNormalLootTables = nightholdNormalRaid.getLootTables()
+            nightholdHeroicLootTables = nightholdHeroicRaid.getLootTables()
 
-        # Run the raids
-        for i in range(numberOfRaidWeeks):
-            raidGroup_ML, raidGroup_PL = self._pickRaidGroup(roster_ML, roster_PL)
+            raidSchedule = map(lambda x: x.lower(), raidSchedule)
 
-            if 'nighthold normal' in raidSchedule:
-                self._distributeMasterLoot(raidGroup_ML, nightholdNormalLootTables)
-                self._distributePersonalLoot(raidGroup_PL, nightholdNormalLootTables)
+            # Run the raids
+            for j in range(numberOfRaidWeeks):
+                raidGroup_ML, raidGroup_PL = self._pickRaidGroup(roster_ML, roster_PL)
 
-            if 'nighthold heroic' in raidSchedule:
-                self._distributeMasterLoot(raidGroup_ML, nightholdHeroicLootTables)
-                self._distributePersonalLoot(raidGroup_PL, nightholdHeroicLootTables)
+                if 'nighthold normal' in raidSchedule:
+                    looted_ML, wastedNoNeed_ML = self._distributeMasterLoot(raidGroup_ML, nightholdNormalLootTables)
+                    looted_PL, wastedNoNeed_PL, wastedNotTradeable_PL = self._distributePersonalLoot(raidGroup_PL, nightholdNormalLootTables)
+                    results_ML.looted[j+1] += looted_ML
+                    results_ML.wastedNoNeed[j+1] += wastedNoNeed_ML
+                    results_PL.looted[j+1] += looted_PL
+                    results_PL.wastedNoNeed[j+1] += wastedNoNeed_PL
+                    results_PL.wastedNotTradeable[j+1] += wastedNotTradeable_PL
 
-            rosterItemLevelAverages_PL.append(self._averageItemLevel(roster_PL))
-            rosterItemLevelAverages_ML.append(self._averageItemLevel(roster_ML))
+                if 'nighthold heroic' in raidSchedule:
+                    looted_ML, wastedNoNeed_ML = self._distributeMasterLoot(raidGroup_ML, nightholdHeroicLootTables)
+                    looted_PL, wastedNoNeed_PL, wastedNotTradeable_PL = self._distributePersonalLoot(raidGroup_PL, nightholdHeroicLootTables)
+                    results_ML.looted[j+1] += looted_ML
+                    results_ML.wastedNoNeed[j+1] += wastedNoNeed_ML
+                    results_PL.looted[j+1] += looted_PL
+                    results_PL.wastedNoNeed[j+1] += wastedNoNeed_PL
+                    results_PL.wastedNotTradeable[j+1] += wastedNotTradeable_PL
 
-        return rosterItemLevelAverages_ML, rosterItemLevelAverages_PL
+                results_PL.itemLevelAverages[j+1] += self._averageItemLevel(roster_PL)
+                results_ML.itemLevelAverages[j+1] += self._averageItemLevel(roster_ML)
+
+        results_ML.normalize()
+        results_PL.normalize()
+
+        return results_ML, results_PL
 
     def _pickRaidGroup(self, roster_PL, roster_ML):
 
