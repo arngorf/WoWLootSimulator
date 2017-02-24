@@ -5,6 +5,13 @@ class Character:
 
         self.items = []
         self.armorClass = armorClass
+        numberOfAttemptsToGetGoodItem = 3
+        self.timeSinceLastLoot = None
+        self.timeBetweenLoots = []
+
+        self.statWeights = []
+        for i in range(4):
+            self.statWeights.append(random.uniform(0.7, 1.25))
 
         for i in range(14):
 
@@ -14,11 +21,19 @@ class Character:
             else:
                 itemLevel = random.gauss(itemLevelAverage, itemLevelVariance) / 5.
                 itemLevel = int(round(itemLevel)) * 5
-                self.items.append(Item(itemLevel, i, self.armorClass, False))
 
-        self.statWeights = []
-        for i in range(4):
-            self.statWeights.append(random.uniform(0.7, 1.25))
+                bestCandidateItem = Item(itemLevel, i, self.armorClass, False)
+
+                for j in range(numberOfAttemptsToGetGoodItem - 1):
+                    newCandidateItem = Item(itemLevel, i, self.armorClass, False)
+                    if self.calculateStatWeight(newCandidateItem) > self.calculateStatWeight(bestCandidateItem):
+                        bestCandidateItem = newCandidateItem
+
+                self.items.append(bestCandidateItem)
+
+    def bossKilled(self):
+        if self.timeSinceLastLoot != None:
+            self.timeSinceLastLoot += 1
 
     def elligibleItem(self, item):
 
@@ -49,6 +64,12 @@ class Character:
         return self.items[itemSlot].itemLevel
 
     def equipItem(self, item):
+
+        if self.timeSinceLastLoot != None:
+
+            self.timeBetweenLoots.append(self.timeSinceLastLoot)
+
+        self.timeSinceLastLoot = 0
 
         itemSlot = item.itemSlot
 
